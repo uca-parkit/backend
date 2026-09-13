@@ -62,6 +62,7 @@ function sinSolapamiento(estados, inicio, fin) {
 export async function crear(idConductor, { id_cochera, id_estacionamiento, id_vehiculo, inicio, fin }) {
   return withTransaction(async (client) => {
     const vehiculo = await obtenerVehiculo(client, id_vehiculo, idConductor);
+    await asegurarVehiculoLibre(client, id_vehiculo, inicio, fin);
 
     const cochera = id_cochera
       ? await bloquearCochera(client, id_cochera, vehiculo, inicio, fin)
@@ -80,7 +81,11 @@ export async function crear(idConductor, { id_cochera, id_estacionamiento, id_ve
       idReserva = rows[0].id_reserva;
     } catch (error) {
       if (error.code === VIOLACION_EXCLUSION) {
-        throw ApiError.conflict('La cochera ya esta reservada en esa franja horaria');
+        throw ApiError.conflict(
+          error.constraint === 'reserva_vehiculo_sin_solapamiento'
+            ? 'El vehiculo ya tiene una reserva que se superpone con esa franja'
+            : 'La cochera ya esta reservada en esa franja horaria',
+        );
       }
       throw error;
     }
@@ -89,9 +94,17 @@ export async function crear(idConductor, { id_cochera, id_estacionamiento, id_ve
   });
 }
 
+/**
+ * Bloquea la fila del vehiculo: dos pedidos simultaneos con el mismo vehiculo
+ * se serializan, y el segundo ya ve la reserva del primero. Siempre se toma
+ * antes que las cocheras, asi el orden de bloqueo es fijo y no hay deadlocks.
+ */
 async function obtenerVehiculo(client, idVehiculo, idConductor) {
   const { rows } = await client.query(
-    'SELECT id_vehiculo, id_tipo_vehiculo, patente, activo FROM vehiculo WHERE id_vehiculo = $1 AND id_conductor = $2',
+    `SELECT id_vehiculo, id_tipo_vehiculo, patente, activo
+       FROM vehiculo
+      WHERE id_vehiculo = $1 AND id_conductor = $2
+      FOR UPDATE`,
     [idVehiculo, idConductor],
   );
 
@@ -99,6 +112,35 @@ async function obtenerVehiculo(client, idVehiculo, idConductor) {
   if (!vehiculo) throw ApiError.notFound('El vehiculo no existe o no pertenece al conductor');
   if (!vehiculo.activo) throw ApiError.conflict('El vehiculo esta dado de baja');
   return vehiculo;
+}
+
+/** Un vehiculo no puede estar en dos reservas vigentes que se superpongan. */
+async function asegurarVehiculoLibre(client, idVehiculo, inicio, fin) {
+  const { rows } = await client.query(
+    `SELECT r.id_reserva, r.inicio, r.fin, e.nombre AS estacionamiento
+       FROM reserva r
+       JOIN cochera c         ON c.id_cochera = r.id_cochera
+       JOIN estacionamiento e ON e.id_estacionamiento = c.id_estacionamiento
+      WHERE r.id_vehiculo = $1
+        AND r.estado = ANY($2::estado_reserva[])
+        AND r.inicio < $4
+        AND r.fin > $3
+      ORDER BY r.inicio
+      LIMIT 1`,
+    [idVehiculo, ESTADOS_VIGENTES, inicio, fin],
+  );
+
+  if (rows.length > 0) {
+    const conflicto = rows[0];
+    throw ApiError.conflict('El vehiculo ya tiene una reserva que se superpone con esa franja', {
+      reserva_en_conflicto: {
+        id_reserva: conflicto.id_reserva,
+        estacionamiento: conflicto.estacionamiento,
+        inicio: conflicto.inicio,
+        fin: conflicto.fin,
+      },
+    });
+  }
 }
 
 /** Reserva de una cochera puntual: lock sobre esa fila y validaciones. */

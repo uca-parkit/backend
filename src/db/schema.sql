@@ -208,3 +208,21 @@ ALTER TABLE vehiculo
 -- Un conductor tiene como mucho un vehiculo predeterminado.
 CREATE UNIQUE INDEX IF NOT EXISTS vehiculo_un_predeterminado
   ON vehiculo (id_conductor) WHERE predeterminado;
+
+-- Un vehiculo no puede estar en dos reservas vigentes que se solapen, aunque
+-- sean en cocheras distintas. Red de seguridad del chequeo de reserva.service.js.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'reserva_vehiculo_sin_solapamiento'
+  ) THEN
+    ALTER TABLE reserva ADD CONSTRAINT reserva_vehiculo_sin_solapamiento
+      EXCLUDE USING gist (
+        id_vehiculo WITH =,
+        tstzrange(inicio, fin, '[)') WITH &&
+      ) WHERE (estado IN ('PENDIENTE', 'CONFIRMADA'));
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'No se pudo crear el EXCLUDE constraint reserva_vehiculo_sin_solapamiento: %', SQLERRM;
+END
+$$;

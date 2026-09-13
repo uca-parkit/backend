@@ -244,9 +244,10 @@ otro con `"predeterminado": true`, pasa a serlo y el anterior deja de serlo.
 ```
 
 Tiene que venir `id_estacionamiento` **o** `id_cochera`. La reserva exige que el
-vehiculo sea del conductor y este activo, que la cochera admita su tipo, que
-`inicio` no este en el pasado y que la franja caiga dentro del horario de
-atencion de ese dia (si el estacionamiento tiene horarios cargados).
+vehiculo sea del conductor, este activo y no tenga otra reserva vigente que se
+superponga; que la cochera admita su tipo; que `inicio` no este en el pasado y
+que la franja caiga dentro del horario de atencion de ese dia (si el
+estacionamiento tiene horarios cargados).
 
 Las reservas se devuelven con el detalle resuelto: patente, cochera,
 estacionamiento, `precio_total` (horas × tarifa) y nombre del conductor.
@@ -276,7 +277,8 @@ franjas que se pisan. Hay dos capas de defensa.
 
 ```
 BEGIN
-  validar vehiculo del conductor
+  SELECT ... FROM vehiculo WHERE id_vehiculo = $1 FOR UPDATE           -- (a)
+  validar vehiculo del conductor y que no tenga reservas superpuestas
   -- con id_cochera:
   SELECT ... FROM cochera c WHERE c.id_cochera = $1 FOR UPDATE OF c   -- (a)
   -- con id_estacionamiento:
@@ -305,6 +307,10 @@ COMMIT
   solapada (limite abierto a derecha).
 - Solo cuentan los estados **PENDIENTE** y **CONFIRMADA**; las CANCELADA y
   FINALIZADA liberan la franja.
+- **El vehiculo tampoco puede estar en dos lugares a la vez.** Su fila se
+  bloquea al empezar (siempre antes que las cocheras, para que el orden de
+  bloqueo sea fijo) y el EXCLUDE `reserva_vehiculo_sin_solapamiento` repite la
+  regla en la base, aunque las reservas sean en cocheras distintas.
 
 **2. Constraint en la base (`schema.sql`)**
 
