@@ -1,5 +1,5 @@
 -- ============================================================================
--- UCAio - Esquema relacional (Sprint 1)
+-- Parkit - Esquema relacional (Sprint 1)
 -- Fiel al modelo ER: UCAio_modelo_ER.drawio.png
 -- ============================================================================
 -- Ejecutar con: npm run db:migrate
@@ -182,3 +182,29 @@ EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'No se pudo crear el EXCLUDE constraint reserva_sin_solapamiento: %', SQLERRM;
 END
 $$;
+
+-- Campos que no estaban en el ER y usa el front ------------------------------
+-- Van como ALTER ... IF NOT EXISTS para que tambien se apliquen sobre bases ya
+-- migradas (ver "Observaciones sobre el ER" en el README).
+
+-- `direccion` se sigue guardando armada (`calle numero`) para la busqueda.
+ALTER TABLE estacionamiento
+  ADD COLUMN IF NOT EXISTS descripcion   VARCHAR(500),
+  ADD COLUMN IF NOT EXISTS calle         VARCHAR(120),
+  ADD COLUMN IF NOT EXISTS numero        VARCHAR(10),
+  ADD COLUMN IF NOT EXISTS ciudad        VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS provincia     VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS codigo_postal VARCHAR(10),
+  ADD COLUMN IF NOT EXISTS cubierto      BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE cochera
+  ADD COLUMN IF NOT EXISTS sector   VARCHAR(20),
+  ADD COLUMN IF NOT EXISTS cubierta BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE vehiculo
+  ADD COLUMN IF NOT EXISTS color          VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS predeterminado BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Un conductor tiene como mucho un vehiculo predeterminado.
+CREATE UNIQUE INDEX IF NOT EXISTS vehiculo_un_predeterminado
+  ON vehiculo (id_conductor) WHERE predeterminado;

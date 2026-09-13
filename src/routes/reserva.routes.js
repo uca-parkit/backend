@@ -8,14 +8,12 @@ import { validarReserva } from '../validators/reserva.validator.js';
 
 const router = Router();
 
-router.post(
-  '/',
-  authenticate,
-  requireRole(ROLES.CONDUCTOR),
-  validate(validarReserva),
-  reservaController.crear,
-);
+const soloConductor = [authenticate, requireRole(ROLES.CONDUCTOR)];
 
-router.get('/', authenticate, requireRole(ROLES.CONDUCTOR), reservaController.listarMias);
+router.post('/', ...soloConductor, validate(validarReserva), reservaController.crear);
+
+router.get('/', ...soloConductor, reservaController.listarMias);
+
+router.patch('/:id/cancelar', ...soloConductor, reservaController.cancelar);
 
 export default router;

@@ -7,7 +7,7 @@ async function main() {
 
   // 0.0.0.0 es necesario para que el contenedor sea alcanzable en Railway.
   const server = app.listen(config.port, '0.0.0.0', () => {
-    console.log(`[api] UCAio escuchando en :${config.port}${config.apiPrefix}`);
+    console.log(`[api] Parkit escuchando en :${config.port}${config.apiPrefix}`);
   });
 
   const shutdown = (senal) => {

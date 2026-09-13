@@ -1,7 +1,7 @@
 {
-  "name": "ucaio-back",
+  "name": "parkit-back",
   "version": "1.0.0",
-  "description": "API REST de UCAio - plataforma que conecta conductores con propietarios de estacionamientos",
+  "description": "API REST de Parkit - plataforma que conecta conductores con propietarios de estacionamientos",
   "type": "module",
   "main": "src/index.js",
   "engines": {
@@ -11,10 +11,11 @@
     "start": "node src/index.js",
     "dev": "node --watch --env-file=.env src/index.js",
     "db:migrate": "node --env-file=.env src/db/migrate.js",
-    "db:migrate:prod": "node src/db/migrate.js"
+    "db:migrate:prod": "node src/db/migrate.js",
+    "db:demo": "node --env-file=.env src/db/demo.js"
   },
   "keywords": [
-    "ucaio",
+    "parkit",
     "estacionamientos",
     "reservas",
     "api",

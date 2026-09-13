@@ -7,7 +7,7 @@ import vehiculoRoutes from './vehiculo.routes.js';
 
 const router = Router();
 
-router.get('/health', (_req, res) => res.json({ status: 'ok', servicio: 'UCAio API' }));
+router.get('/health', (_req, res) => res.json({ status: 'ok', servicio: 'Parkit API' }));
 
 router.use('/auth', authRoutes);
 router.use('/estacionamientos', estacionamientoRoutes);

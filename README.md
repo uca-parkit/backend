@@ -1,7 +1,8 @@
-# UCAio - Backend
+# Parkit - Backend
 
-API REST de **UCAio**, la plataforma que conecta conductores con propietarios de
+API REST de **Parkit**, la plataforma que conecta conductores con propietarios de
 estacionamientos para buscar, comparar y reservar lugares disponibles.
+Proyecto de la software factory UCAio (Proyecto Integral de Desarrollo, UCA).
 
 Stack: **Node.js + Express 5 + PostgreSQL** (SQL crudo con `pg`, sin ORM).
 
@@ -13,6 +14,7 @@ Stack: **Node.js + Express 5 + PostgreSQL** (SQL crudo con `pg`, sin ORM).
 npm install
 cp .env.example .env        # completar DATABASE_URL y JWT_SECRET
 npm run db:migrate          # crea tablas, constraints y tipos de vehiculo
+npm run db:demo             # opcional: usuarios y estacionamientos de ejemplo
 npm run dev
 ```
 
@@ -26,6 +28,11 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 | `npm start`               | Servidor en modo produccion                         |
 | `npm run db:migrate`      | Aplica `schema.sql` + `seed.sql` leyendo `.env`     |
 | `npm run db:migrate:prod` | Igual, pero tomando las env vars del entorno        |
+| `npm run db:demo`         | Carga datos de ejemplo (no corre en produccion)     |
+
+`db:demo` crea `propietario@parkit.com` y `conductor@parkit.com` (password
+`demo1234`), dos estacionamientos publicados con horarios y cocheras, y dos
+vehiculos del conductor. Son los mismos accesos de prueba que ofrece el front.
 
 ### Variables de entorno
 
@@ -67,13 +74,14 @@ src/
 ├── db/
 │   ├── schema.sql          DDL completo (tablas, FKs, UNIQUEs, CHECKs, EXCLUDE)
 │   ├── seed.sql            Catalogo TIPO_VEHICULO (Auto / Moto / Camioneta)
-│   └── migrate.js          Runner idempotente de schema + seed
+│   ├── migrate.js          Runner idempotente de schema + seed
+│   └── demo.js             Datos de ejemplo para desarrollo
 ├── routes/                 Definicion de endpoints y middlewares por ruta
 ├── controllers/            Traducen HTTP <-> servicios (sin logica de negocio)
 ├── services/               Logica de negocio y todo el SQL
 ├── middlewares/            auth (JWT + roles), validate, notFound, errorHandler
 ├── validators/             Validacion y normalizacion de la entrada
-├── utils/                  ApiError, asyncHandler, jwt, constantes de dominio
+├── utils/                  ApiError, asyncHandler, jwt, horario, constantes de dominio
 ├── app.js                  Armado de la app Express
 └── index.js                Arranque, healthcheck de DB y shutdown
 ```
@@ -120,7 +128,21 @@ Estas decisiones vale la pena revisarlas con el equipo:
    ningun endpoint. Deberia normalizarse antes del Sprint 2.
 5. **`COCHERA.estado_actual` no se modifica al reservar.** Representa el estado
    fisico del lugar en este momento; una reserva a futuro no lo cambia. La
-   ocupacion se deriva de las reservas vigentes.
+   ocupacion se deriva de las reservas vigentes: los listados de cocheras traen
+   `reservada_ahora` cuando hay una reserva transcurriendo.
+6. **`horario.dia_semana` usa 0 = domingo**, igual que `Date.getDay()` en JS.
+7. **Hora local.** Las fechas y horas de negocio (franjas, horarios de
+   atencion, "reservas de hoy") se interpretan en hora argentina, UTC-3 fijo.
+   Ver `src/utils/horario.js`.
+8. **Campos que no estaban en el ER** y usa el front (se agregan con
+   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` al final de `schema.sql`):
+   - `estacionamiento`: `descripcion`, `cubierto` y la direccion desglosada
+     (`calle`, `numero`, `ciudad`, `provincia`, `codigo_postal`). La columna
+     `direccion` se sigue guardando, armada como `calle numero`, porque la usa
+     la busqueda por texto.
+   - `cochera`: `sector` y `cubierta`.
+   - `vehiculo`: `color` y `predeterminado` (como mucho uno por conductor,
+     garantizado con un indice unico parcial).
 
 ---
 
@@ -144,45 +166,90 @@ Autenticacion: `Authorization: Bearer <token>`.
 
 ### Estacionamientos y cocheras
 
-| Metodo | Ruta                                  | Acceso      | Descripcion                        |
-| ------ | ------------------------------------- | ----------- | ---------------------------------- |
-| GET    | `/api/estacionamientos`               | publico     | Busqueda de publicados y activos   |
-| GET    | `/api/estacionamientos/:id`           | publico     | Detalle con horarios y cocheras    |
-| GET    | `/api/estacionamientos/:id/cocheras`  | publico     | Cocheras del estacionamiento       |
-| GET    | `/api/estacionamientos/mios`          | PROPIETARIO | Los del propietario autenticado    |
-| POST   | `/api/estacionamientos`               | PROPIETARIO | Alta (queda vinculado a su id)     |
-| POST   | `/api/estacionamientos/:id/cocheras`  | PROPIETARIO | Alta de cochera (valida propiedad) |
+| Metodo | Ruta                                             | Acceso      | Descripcion                              |
+| ------ | ------------------------------------------------ | ----------- | ---------------------------------------- |
+| GET    | `/api/estacionamientos`                          | publico     | Busqueda de publicados y activos         |
+| GET    | `/api/estacionamientos/:id`                      | publico     | Detalle con horarios y cocheras          |
+| GET    | `/api/estacionamientos/:id/cocheras`             | publico     | Cocheras del estacionamiento             |
+| GET    | `/api/estacionamientos/:id/disponibilidad`       | publico     | Franjas de un dia con cocheras libres    |
+| GET    | `/api/estacionamientos/mios`                     | PROPIETARIO | Los del propietario autenticado          |
+| GET    | `/api/estacionamientos/:id/reservas`             | PROPIETARIO | Reservas recibidas (`?fecha=YYYY-MM-DD`) |
+| POST   | `/api/estacionamientos`                          | PROPIETARIO | Alta (queda vinculado a su id)           |
+| POST   | `/api/estacionamientos/:id/cocheras`             | PROPIETARIO | Alta de cochera (valida propiedad)       |
+| PATCH  | `/api/estacionamientos/:id/cocheras/:idCochera`  | PROPIETARIO | Modifica identificador, tipo o estado    |
+| DELETE | `/api/estacionamientos/:id/cocheras/:idCochera`  | PROPIETARIO | Baja logica (`activo = false`)           |
 
-Filtros de busqueda: `q` (nombre o direccion), `zona`, `id_tipo_vehiculo`,
-`tarifa_max`, `limit` (1-100, default 20), `offset`.
+Filtros de busqueda: `q` (nombre, direccion, barrio o descripcion), `zona`,
+`id_tipo_vehiculo`, `tarifa_max`, `cubierto` (`true`/`false`), `limit`
+(1-100, default 20), `offset`.
+
+Los listados y el detalle traen tambien `cocheras_activas`, `cocheras_libres`
+(libres en este momento), `tipos_vehiculo` (ids admitidos) y `horarios`.
 
 ```jsonc
 // POST /api/estacionamientos
-{ "nombre": "Cochera Centro", "direccion": "Av. Corrientes 1234",
+{ "nombre": "Cochera Centro", "descripcion": "Subsuelo con vigilancia",
+  "calle": "Av. Corrientes", "numero": "1234", "ciudad": "CABA",
+  "provincia": "Buenos Aires", "codigo_postal": "C1043",
   "barrio_zona": "Centro", "latitud": -34.6037, "longitud": -58.3816,
   "telefono_contacto": "1155667788", "email_contacto": "contacto@centro.com",
-  "tarifa_hora": 1500.5, "publicado": true,
+  "tarifa_hora": 1500.5, "cubierto": true, "publicado": true,
   "horarios": [ { "dia_semana": 1, "hora_apertura": "08:00", "hora_cierre": "20:00" } ] }
 
 // POST /api/estacionamientos/:id/cocheras
-{ "identificador": "A-01", "id_tipo_vehiculo": 1, "estado_actual": "LIBRE" }
+{ "identificador": "A-01", "id_tipo_vehiculo": 1, "sector": "A", "cubierta": true,
+  "estado_actual": "LIBRE" }
+
+// PATCH /api/estacionamientos/:id/cocheras/:idCochera  (al menos un campo)
+{ "estado_actual": "OCUPADA" }
+
+// GET /api/estacionamientos/:id/disponibilidad?fecha=2026-09-15&id_tipo_vehiculo=1
+{ "fecha": "2026-09-15",
+  "franjas": [ { "hora_desde": "08:00", "hora_hasta": "10:00",
+                 "inicio": "2026-09-15T11:00:00.000Z", "fin": "2026-09-15T13:00:00.000Z",
+                 "disponible": true, "cocheras_libres": 4, "motivo": null } ] }
 ```
+
+`motivo` explica por que una franja no se puede reservar: fuera del horario de
+atencion, ya empezo o no quedan cocheras libres.
 
 ### Vehiculos y reservas
 
-| Metodo | Ruta                   | Acceso    | Descripcion                     |
-| ------ | ---------------------- | --------- | ------------------------------- |
-| GET    | `/api/vehiculos/tipos` | publico   | Catalogo de tipos de vehiculo   |
-| POST   | `/api/vehiculos`       | CONDUCTOR | Registra un vehiculo            |
-| GET    | `/api/vehiculos`       | CONDUCTOR | Sus vehiculos                   |
-| POST   | `/api/reservas`        | CONDUCTOR | Crea una reserva                |
-| GET    | `/api/reservas`        | CONDUCTOR | Sus reservas                    |
+| Metodo | Ruta                        | Acceso    | Descripcion                          |
+| ------ | --------------------------- | --------- | ------------------------------------ |
+| GET    | `/api/vehiculos/tipos`      | publico   | Catalogo de tipos de vehiculo        |
+| POST   | `/api/vehiculos`            | CONDUCTOR | Registra un vehiculo                 |
+| GET    | `/api/vehiculos`            | CONDUCTOR | Sus vehiculos                        |
+| POST   | `/api/reservas`             | CONDUCTOR | Crea una reserva                     |
+| GET    | `/api/reservas`             | CONDUCTOR | Sus reservas                         |
+| PATCH  | `/api/reservas/:id/cancelar`| CONDUCTOR | Cancela una reserva propia vigente   |
 
 ```jsonc
-// POST /api/reservas
+// POST /api/vehiculos
+{ "patente": "AB123CD", "id_tipo_vehiculo": 1, "marca": "Toyota",
+  "modelo": "Corolla", "color": "Gris", "predeterminado": true }
+```
+
+El primer vehiculo de un conductor queda como predeterminado. Si se registra
+otro con `"predeterminado": true`, pasa a serlo y el anterior deja de serlo.
+
+```jsonc
+// POST /api/reservas  (lo que usa la app: el backend asigna la cochera)
+{ "id_estacionamiento": "uuid", "id_vehiculo": "uuid",
+  "inicio": "2026-09-10T14:00:00-03:00", "fin": "2026-09-10T18:00:00-03:00" }
+
+// Alternativa: reservar una cochera puntual
 { "id_cochera": "uuid", "id_vehiculo": "uuid",
   "inicio": "2026-09-10T14:00:00-03:00", "fin": "2026-09-10T18:00:00-03:00" }
 ```
+
+Tiene que venir `id_estacionamiento` **o** `id_cochera`. La reserva exige que el
+vehiculo sea del conductor y este activo, que la cochera admita su tipo, que
+`inicio` no este en el pasado y que la franja caiga dentro del horario de
+atencion de ese dia (si el estacionamiento tiene horarios cargados).
+
+Las reservas se devuelven con el detalle resuelto: patente, cochera,
+estacionamiento, `precio_total` (horas × tarifa) y nombre del conductor.
 
 ### Formato de errores
 
@@ -196,7 +263,7 @@ Todos los errores salen con la misma forma:
 
 `400` validacion · `401` sin token o credenciales invalidas · `403` rol o
 propiedad incorrecta · `404` inexistente · `409` conflicto (email/patente/
-identificador duplicado, solapamiento) · `500` inesperado.
+identificador duplicado, solapamiento, sin lugar, fuera de horario) · `500` inesperado.
 
 ---
 
@@ -209,22 +276,29 @@ franjas que se pisan. Hay dos capas de defensa.
 
 ```
 BEGIN
+  validar vehiculo del conductor
+  -- con id_cochera:
   SELECT ... FROM cochera c WHERE c.id_cochera = $1 FOR UPDATE OF c   -- (a)
-  validar cochera activa, estacionamiento publicado, vehiculo del conductor
-  validar que el tipo de vehiculo coincida con el de la cochera
+  -- con id_estacionamiento:
+  SELECT ... FROM cochera c WHERE <compatibles> ORDER BY id FOR UPDATE -- (a)
   SELECT 1 FROM reserva                                                -- (b)
-   WHERE id_cochera = $1
+   WHERE id_cochera = c.id_cochera
      AND estado = ANY('{PENDIENTE,CONFIRMADA}')
      AND inicio < $fin AND fin > $inicio
+  validar horario de atencion
   INSERT INTO reserva ...
 COMMIT
 ```
 
-- **(a)** El lock va sobre la fila de `COCHERA`, no sobre las reservas. Bloquear
-  las reservas existentes no alcanzaria: dos transacciones simultaneas no verian
-  las filas que la otra esta por insertar (phantom read). Al tomar el lock sobre
-  la cochera, el segundo pedido espera el commit del primero y recien despues
-  evalua el solapamiento.
+- **(a)** El lock va sobre las filas de `COCHERA`, no sobre las reservas.
+  Bloquear las reservas existentes no alcanzaria: dos transacciones simultaneas
+  no verian las filas que la otra esta por insertar (phantom read). Al tomar el
+  lock sobre la cochera, el segundo pedido espera el commit del primero y recien
+  despues evalua el solapamiento.
+- En la **asignacion automatica** se bloquean todas las cocheras compatibles,
+  siempre en el mismo orden, y se toma la primera libre. El segundo pedido
+  simultaneo ve la reserva del primero y elige otra cochera; si no queda
+  ninguna recibe `409`. El orden fijo evita deadlocks.
 - **(b)** Dos intervalos `[a, b)` y `[c, d)` se solapan si `a < d AND b > c`.
   Esto cubre solapamiento exacto, parcial de cada lado, contenido y continente.
   Una reserva que arranca justo cuando termina otra **no** se considera
@@ -246,14 +320,11 @@ Garantiza la invariante aunque alguien escriba por fuera de la API. Si la
 extension `btree_gist` no esta disponible, la migracion emite un NOTICE y sigue:
 la validacion transaccional se mantiene.
 
-Verificado con 6 requests concurrentes sobre la misma franja: se crea
-exactamente 1 reserva y las otras 5 reciben `409`.
-
 ---
 
 ## Alcance del Sprint 1
 
-- [x] Nombre de la aplicacion: **UCAio**
+- [x] Nombre de la aplicacion: **Parkit** (UCAio es la software factory)
 - [x] Registro y login con roles Conductor y Propietario
 - [x] Alta de estacionamientos con nombre, direccion, horarios y contacto
 - [x] ABM de cocheras con identificador y tipo de vehiculo admitido
@@ -261,7 +332,5 @@ exactamente 1 reserva y las otras 5 reciben `409`.
 - [x] Consulta de estacionamientos publicados
 - [x] Creacion de reservas con vehiculo, fecha y franja horaria
 
-Pendiente para el proximo sprint: baja/modificacion de usuarios y
-estacionamientos (el ABM hoy cubre alta y consulta), cambios de estado de la
-reserva (confirmar / cancelar / finalizar), validacion de la reserva contra los
-horarios de apertura y normalizacion de `EXCEPCION`.
+Pendiente: modificacion y baja de usuarios, estacionamientos y vehiculos;
+confirmar y finalizar reservas; normalizacion de `EXCEPCION`.
