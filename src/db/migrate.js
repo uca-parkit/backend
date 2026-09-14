@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url';
 
 import { pool } from '../config/database.js';
 
+if (!pool) {
+  console.error('[migrate] falta DATABASE_URL: no hay base contra la cual migrar');
+  process.exit(1);
+}
+
 const carpeta = dirname(fileURLToPath(import.meta.url));
 
 async function ejecutarArchivo(nombre) {

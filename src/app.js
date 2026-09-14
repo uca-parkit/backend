@@ -3,7 +3,10 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 import { config } from './config/env.js';
-import routes from './routes/index.js';
+import authRoutes from './routes/auth.routes.js';
+import estacionamientoRoutes from './routes/estacionamiento.routes.js';
+import reservaRoutes from './routes/reserva.routes.js';
+import vehiculoRoutes from './routes/vehiculo.routes.js';
 import { notFound } from './middlewares/notFound.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
@@ -22,7 +25,14 @@ if (config.nodeEnv !== 'test') {
   app.use(morgan(config.isProduction ? 'combined' : 'dev'));
 }
 
-app.use(config.apiPrefix, routes);
+const { apiPrefix } = config;
+
+app.get(`${apiPrefix}/health`, (_req, res) => res.json({ status: 'ok', servicio: 'UCAio API' }));
+
+app.use(`${apiPrefix}/auth`, authRoutes);
+app.use(`${apiPrefix}/estacionamientos`, estacionamientoRoutes);
+app.use(`${apiPrefix}/vehiculos`, vehiculoRoutes);
+app.use(`${apiPrefix}/reservas`, reservaRoutes);
 
 // Manejo de errores (siempre al final)
 app.use(notFound);

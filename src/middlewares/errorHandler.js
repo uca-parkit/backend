@@ -30,7 +30,10 @@ export function errorHandler(err, _req, res, _next) {
     mensaje = ERRORES_PG[err.code].mensaje;
   }
 
-  if (statusCode >= 500) {
+  // Los ApiError 5xx (ej: 503 sin base) son esperados: no son bugs a depurar.
+  const inesperado = statusCode >= 500 && !(err instanceof ApiError);
+
+  if (inesperado) {
     console.error('[error]', err);
   }
 
@@ -38,7 +41,7 @@ export function errorHandler(err, _req, res, _next) {
     error: {
       message: mensaje,
       ...(detalles ? { details: detalles } : {}),
-      ...(!config.isProduction && statusCode >= 500 ? { stack: err.stack } : {}),
+      ...(!config.isProduction && inesperado ? { stack: err.stack } : {}),
     },
   });
 }

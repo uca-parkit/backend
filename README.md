@@ -11,12 +11,22 @@ Stack: **Node.js + Express 5 + PostgreSQL** (SQL crudo con `pg`, sin ORM).
 
 ```bash
 npm install
-cp .env.example .env        # completar DATABASE_URL y JWT_SECRET
-npm run db:migrate          # crea tablas, constraints y tipos de vehiculo
+cp .env.example .env        # completar JWT_SECRET (y DATABASE_URL cuando haya base)
+npm run db:migrate          # crea tablas, constraints y tipos de vehiculo (requiere DATABASE_URL)
 npm run dev
 ```
 
 La API queda en `http://localhost:3000/api` y `GET /api/health` responde el estado.
+
+### Modo sin base (temporal)
+
+Si no se define `DATABASE_URL`, la API arranca igual y solo acepta el login
+hardcodeado **`admin@gmail.com` / `admin123`** (`POST /api/auth/login`, `GET /api/auth/me` y `POST /api/auth/rol`). Tiene los perfiles CONDUCTOR y PROPIETARIO y puede alternar entre ellos.
+El resto de los endpoints responde `503`. Al configurar `DATABASE_URL` ese login
+deja de funcionar y se usa la tabla `usuario`.
+
+Para usar Neon: crear la base, poner su connection string en `DATABASE_URL`,
+`DATABASE_SSL=true` y correr `npm run db:migrate` (aplica `src/db/schema.sql` y `seed.sql`).
 
 ### Scripts
 
@@ -31,7 +41,7 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 
 | Variable            | Obligatoria | Default         | Notas                                              |
 | ------------------- | ----------- | --------------- | -------------------------------------------------- |
-| `DATABASE_URL`      | si          | —               | En Railway la inyecta el servicio Postgres          |
+| `DATABASE_URL`      | no (temporal) | —             | Sin ella: modo sin base con admin hardcodeado       |
 | `JWT_SECRET`        | si          | —               | Cadena larga y aleatoria                            |
 | `PORT`              | no          | `3000`          | Railway la define automaticamente                   |
 | `NODE_ENV`          | no          | `development`   |                                                     |
@@ -41,7 +51,7 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 | `JWT_EXPIRES_IN`    | no          | `1d`            |                                                     |
 | `BCRYPT_ROUNDS`     | no          | `10`            |                                                     |
 
-El proceso **falla al arrancar** si falta `DATABASE_URL` o `JWT_SECRET`, en vez de
+El proceso **falla al arrancar** si falta `JWT_SECRET`, en vez de
 levantar y romper en el primer request.
 
 ### Despliegue en Railway
@@ -135,6 +145,7 @@ Autenticacion: `Authorization: Bearer <token>`.
 | POST   | `/api/auth/register` | publico  | Alta con rol CONDUCTOR o PROPIETARIO |
 | POST   | `/api/auth/login`    | publico  | Devuelve usuario + JWT               |
 | GET    | `/api/auth/me`       | token    | Perfil del usuario autenticado       |
+| POST   | `/api/auth/rol`      | token    | Cambia el perfil activo (`{ "rol": "CONDUCTOR" }`) si esta en `usuario.roles`; devuelve usuario + JWT nuevo |
 
 ```jsonc
 // POST /api/auth/register

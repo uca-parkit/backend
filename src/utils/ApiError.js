@@ -28,4 +28,8 @@ export class ApiError extends Error {
   static conflict(message = 'Conflicto con el estado actual del recurso') {
     return new ApiError(409, message);
   }
+
+  static serviceUnavailable(message = 'Servicio no disponible') {
+    return new ApiError(503, message);
+  }
 }
