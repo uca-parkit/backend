@@ -4,7 +4,7 @@ import * as vehiculoController from '../controllers/vehiculo.controller.js';
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { validate } from '../middlewares/validate.js';
 import { ROLES } from '../utils/roles.js';
-import { validarVehiculo } from '../validators/vehiculo.validator.js';
+import { validarCambiosVehiculo, validarVehiculo } from '../validators/vehiculo.validator.js';
 
 const router = Router();
 
@@ -19,5 +19,15 @@ router.post(
 );
 
 router.get('/', authenticate, requireRole(ROLES.CONDUCTOR), vehiculoController.listarMios);
+
+router.patch(
+  '/:id',
+  authenticate,
+  requireRole(ROLES.CONDUCTOR),
+  validate(validarCambiosVehiculo),
+  vehiculoController.actualizar,
+);
+
+router.delete('/:id', authenticate, requireRole(ROLES.CONDUCTOR), vehiculoController.eliminar);
 
 export default router;
