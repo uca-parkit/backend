@@ -35,6 +35,7 @@ export async function listarPorConductor(idConductor) {
        FROM vehiculo v
        JOIN tipo_vehiculo t ON t.id_tipo_vehiculo = v.id_tipo_vehiculo
       WHERE v.id_conductor = $1
+        AND v.activo = TRUE
       ORDER BY v.patente`,
     [idConductor],
   );
@@ -48,6 +49,58 @@ export async function obtenerDelConductor(idVehiculo, idConductor) {
   );
 
   if (!rows[0]) throw ApiError.notFound('Vehiculo no encontrado para este conductor');
+  return rows[0];
+}
+
+/**
+ * Actualiza solo los campos presentes en `cambios`. Verifica antes que el
+ * vehiculo sea del conductor (404 si no) para no filtrar los de otros.
+ */
+export async function actualizar(idVehiculo, idConductor, cambios) {
+  await obtenerDelConductor(idVehiculo, idConductor);
+
+  const sets = [];
+  const valores = [];
+  for (const columna of ['patente', 'id_tipo_vehiculo', 'marca', 'modelo']) {
+    if (cambios[columna] !== undefined) {
+      valores.push(cambios[columna]);
+      sets.push(`${columna} = $${valores.length}`);
+    }
+  }
+
+  // Sin campos para tocar, se devuelve el vehiculo tal cual.
+  if (sets.length === 0) return obtenerDelConductor(idVehiculo, idConductor);
+
+  valores.push(idVehiculo, idConductor);
+  try {
+    const { rows } = await query(
+      `UPDATE vehiculo SET ${sets.join(', ')}
+        WHERE id_vehiculo = $${valores.length - 1} AND id_conductor = $${valores.length}
+        RETURNING ${CAMPOS}`,
+      valores,
+    );
+    return rows[0];
+  } catch (error) {
+    if (error.code === VIOLACION_UNIQUE) {
+      throw ApiError.conflict(`La patente ${cambios.patente} ya esta registrada`);
+    }
+    if (error.code === VIOLACION_FK) {
+      throw ApiError.badRequest('El id_tipo_vehiculo indicado no existe');
+    }
+    throw error;
+  }
+}
+
+/** Baja logica: marca activo = false, no borra la fila. */
+export async function darDeBaja(idVehiculo, idConductor) {
+  await obtenerDelConductor(idVehiculo, idConductor);
+
+  const { rows } = await query(
+    `UPDATE vehiculo SET activo = FALSE
+      WHERE id_vehiculo = $1 AND id_conductor = $2
+      RETURNING ${CAMPOS}`,
+    [idVehiculo, idConductor],
+  );
   return rows[0];
 }
 
