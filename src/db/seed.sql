@@ -185,3 +185,18 @@ VALUES
   ('e6666666-6666-6666-6666-666666666666', 2, 'H2', 'LIBRE',    TRUE),
   ('e6666666-6666-6666-6666-666666666666', 1, 'H3', 'RESERVADA',TRUE)
 ON CONFLICT (id_estacionamiento, identificador) DO NOTHING;
+
+-- 10. HORARIOS DE ATENCION (todos los dias, 0=domingo .. 6=sabado)
+-- Sin esto, el front muestra "Sin horario" y "Sin lugares ahora".
+INSERT INTO horario (id_estacionamiento, dia_semana, hora_apertura, hora_cierre)
+SELECT est, dia, '08:00'::time, '22:00'::time
+FROM (VALUES
+        ('e1111111-1111-1111-1111-111111111111'::uuid),
+        ('e2222222-2222-2222-2222-222222222222'::uuid),
+        ('e3333333-3333-3333-3333-333333333333'::uuid),
+        ('e4444444-4444-4444-4444-444444444444'::uuid),
+        ('e5555555-5555-5555-5555-555555555555'::uuid),
+        ('e6666666-6666-6666-6666-666666666666'::uuid)
+     ) AS e(est)
+CROSS JOIN generate_series(0, 6) AS d(dia)
+ON CONFLICT (id_estacionamiento, dia_semana) DO NOTHING;
