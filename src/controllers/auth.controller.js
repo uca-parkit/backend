@@ -12,15 +12,6 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const perfil = asyncHandler(async (req, res) => {
-  const usuario = await authService.obtenerPerfil(req.usuario.id, req.usuario.rol);
+  const usuario = await authService.obtenerPerfil(req.usuario.id);
   res.json({ usuario });
-});
-
-export const cambiarRol = asyncHandler(async (req, res) => {
-  const { usuario, token } = await authService.cambiarRol(
-    req.usuario.id,
-    req.usuario.rol,
-    req.body.rol,
-  );
-  res.json({ usuario, token });
 });

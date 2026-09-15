@@ -20,9 +20,8 @@ export const config = {
   apiPrefix: process.env.API_PREFIX || '/api',
 
   db: {
-    // Opcional mientras no haya base: sin DATABASE_URL la API arranca igual,
-    // solo funciona el login del admin hardcodeado y el resto responde 503.
-    url: process.env.DATABASE_URL || null,
+    // Railway expone DATABASE_URL automaticamente al vincular el servicio Postgres.
+    url: requerido('DATABASE_URL', process.env.DATABASE_URL),
     // Railway (y la mayoria de los proveedores administrados) usan certificados
     // que no estan en el store local, por eso rejectUnauthorized: false.
     ssl: (process.env.DATABASE_SSL ?? (nodeEnv === 'production' ? 'true' : 'false')) === 'true',
