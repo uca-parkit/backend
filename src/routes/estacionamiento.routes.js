@@ -7,6 +7,7 @@ import { ROLES } from '../utils/roles.js';
 import {
   validarBusqueda,
   validarCochera,
+  validarDisponibilidad,
   validarEstacionamiento,
 } from '../validators/estacionamiento.validator.js';
 
@@ -25,6 +26,11 @@ router.get(
 
 router.get('/:id', estacionamientoController.obtener);
 router.get('/:id/cocheras', estacionamientoController.listarCocheras);
+router.get(
+  '/:id/disponibilidad',
+  validate(validarDisponibilidad, 'query'),
+  estacionamientoController.disponibilidad,
+);
 
 // Propietario: alta de estacionamientos y cocheras.
 router.post(

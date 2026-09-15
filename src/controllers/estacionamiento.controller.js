@@ -24,6 +24,11 @@ export const obtener = asyncHandler(async (req, res) => {
   res.json({ estacionamiento });
 });
 
+export const disponibilidad = asyncHandler(async (req, res) => {
+  const franjas = await estacionamientoService.disponibilidad(req.params.id, req.query);
+  res.json({ franjas });
+});
+
 export const listarMios = asyncHandler(async (req, res) => {
   const estacionamientos = await estacionamientoService.listarPorPropietario(req.usuario.id);
   res.json({ estacionamientos });

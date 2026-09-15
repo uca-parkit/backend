@@ -78,6 +78,19 @@ export function validarCochera(body) {
     .resultado();
 }
 
+/** Query de GET /api/estacionamientos/:id/disponibilidad. */
+export function validarDisponibilidad(query) {
+  return campos(query)
+    .texto('fecha', query.fecha, { min: 10, max: 10 })
+    .verificar(
+      query.fecha == null || /^\d{4}-\d{2}-\d{2}$/.test(String(query.fecha)),
+      'fecha',
+      'debe tener formato YYYY-MM-DD',
+    )
+    .entero('id_tipo_vehiculo', query.id_tipo_vehiculo, { requerido: false, min: 1 })
+    .resultado();
+}
+
 /** Filtros de GET /api/estacionamientos. Todo opcional. */
 export function validarBusqueda(query) {
   return campos(query)

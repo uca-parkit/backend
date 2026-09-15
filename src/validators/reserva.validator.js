@@ -2,7 +2,8 @@ import { campos } from './helpers.js';
 
 export function validarReserva(body) {
   const validador = campos(body)
-    .uuid('id_cochera', body.id_cochera)
+    // El backend elige la cochera: el conductor reserva contra el estacionamiento.
+    .uuid('id_estacionamiento', body.id_estacionamiento)
     .uuid('id_vehiculo', body.id_vehiculo)
     .fechaHora('inicio', body.inicio)
     .fechaHora('fin', body.fin);
