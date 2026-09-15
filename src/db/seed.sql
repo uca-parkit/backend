@@ -13,26 +13,30 @@ SELECT setval(
 
 -- SEMBRADO DE DATOS INICIALES (TESTING) --------------------------------------
 
--- Conductor de prueba
-INSERT INTO usuario (nombre, apellido, email, password_hash, rol, telefono)
+-- Actualizar o Insertar el Conductor de prueba con un HASH valido de bcrypt
+INSERT INTO usuario (nombre, apellido, email, password_hash, rol, telefono, activo)
 VALUES (
-  'Juan', 
-  'Pérez', 
-  'conductor@ucaio.com', 
-  'demo1234', -- O el hash si ya usas bcrypt
-  'CONDUCTOR', 
-  '1122334455'
+  'Juan',
+  'Pérez',
+  'conductor@test.com',
+  '$2b$10$u4CEphG8idmn8acxVzoPAuWgj3BTrdnpL7.KvphWnl98/iUAPYQ/i', -- Hash de 'demo1234'
+  'CONDUCTOR',
+  '1122334455',
+  TRUE
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE 
+SET password_hash = EXCLUDED.password_hash;
 
--- Propietario de prueba
-INSERT INTO usuario (nombre, apellido, email, password_hash, rol, telefono)
+-- Actualizar o Insertar el Propietario de prueba
+INSERT INTO usuario (nombre, apellido, email, password_hash, rol, telefono, activo)
 VALUES (
-  'María', 
-  'Gómez', 
-  'propietario@ucaio.com', 
-  'demo1234', 
-  'PROPIETARIO', 
-  '1199887766'
+  'María',
+  'Gómez',
+  'propietario@test.com',
+  '$2b$10$u4CEphG8idmn8acxVzoPAuWgj3BTrdnpL7.KvphWnl98/iUAPYQ/i', -- Hash de 'demo1234'
+  'PROPIETARIO',
+  '1199887766',
+  TRUE
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE 
+SET password_hash = EXCLUDED.password_hash;

@@ -72,6 +72,7 @@ export async function login({ email, password }) {
     `SELECT ${CAMPOS_PUBLICOS}, password_hash FROM usuario WHERE email = $1`,
     [email],
   );
+  console.log('[DEBUG DB] Usuario encontrado:', rows[0]); // <-- AGREGA ESTA LÍNEA
 
   const usuario = rows[0];
 
