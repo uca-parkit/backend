@@ -4,6 +4,21 @@ import { ESTADOS_VIGENTES, ESTADOS_RESERVA } from '../utils/roles.js';
 
 const VIOLACION_EXCLUSION = '23P01';
 
+// Vista detallada de la reserva con sus joins, en la forma que espera el front
+// (ReservaDto). El WHERE lo pone cada consumidor.
+const SELECT_RESERVA_DETALLE = `
+  SELECT r.id_reserva, r.id_conductor, r.inicio, r.fin, r.estado, r.created_at,
+         r.id_vehiculo, v.patente, v.marca, v.modelo, v.id_tipo_vehiculo,
+         r.id_cochera, c.identificador AS cochera,
+         NULL::text AS cochera_sector, FALSE AS cochera_cubierta,
+         e.id_estacionamiento, e.nombre AS estacionamiento, e.direccion, e.tarifa_hora,
+         ROUND(e.tarifa_hora * EXTRACT(EPOCH FROM (r.fin - r.inicio)) / 3600)::int AS precio_total
+    FROM reserva r
+    JOIN vehiculo v        ON v.id_vehiculo = r.id_vehiculo
+    JOIN cochera c         ON c.id_cochera = r.id_cochera
+    JOIN estacionamiento e ON e.id_estacionamiento = c.id_estacionamiento
+`;
+
 /**
  * Crea una reserva: el conductor reserva contra un ESTACIONAMIENTO y el backend
  * le asigna una cochera libre del tipo de su vehiculo, sin sobrevender.
@@ -121,19 +136,40 @@ export async function crear(idConductor, { id_estacionamiento, id_vehiculo, inic
 
 export async function listarPorConductor(idConductor) {
   const { rows } = await query(
-    `SELECT r.id_reserva, r.id_conductor, r.inicio, r.fin, r.estado, r.created_at,
-            r.id_vehiculo, v.patente, v.marca, v.modelo, v.id_tipo_vehiculo,
-            r.id_cochera, c.identificador AS cochera,
-            NULL::text AS cochera_sector, FALSE AS cochera_cubierta,
-            e.id_estacionamiento, e.nombre AS estacionamiento, e.direccion, e.tarifa_hora,
-            ROUND(e.tarifa_hora * EXTRACT(EPOCH FROM (r.fin - r.inicio)) / 3600)::int AS precio_total
-       FROM reserva r
-       JOIN vehiculo v        ON v.id_vehiculo = r.id_vehiculo
-       JOIN cochera c         ON c.id_cochera = r.id_cochera
-       JOIN estacionamiento e ON e.id_estacionamiento = c.id_estacionamiento
-      WHERE r.id_conductor = $1
-      ORDER BY r.inicio DESC`,
+    `${SELECT_RESERVA_DETALLE} WHERE r.id_conductor = $1 ORDER BY r.inicio DESC`,
     [idConductor],
   );
   return rows;
+}
+
+/**
+ * Cancela una reserva del conductor: la deja en estado CANCELADA (baja logica,
+ * no se borra). Verifica pertenencia (404 si no es suya) y que sea cancelable.
+ */
+export async function cancelar(idReserva, idConductor) {
+  const { rows } = await query(
+    'SELECT id_reserva, estado, fin FROM reserva WHERE id_reserva = $1 AND id_conductor = $2',
+    [idReserva, idConductor],
+  );
+
+  const reserva = rows[0];
+  if (!reserva) throw ApiError.notFound('Reserva no encontrada para este conductor');
+
+  if (reserva.estado === ESTADOS_RESERVA.CANCELADA) {
+    throw ApiError.conflict('La reserva ya estaba cancelada');
+  }
+  if (reserva.estado === ESTADOS_RESERVA.FINALIZADA || new Date(reserva.fin) <= new Date()) {
+    throw ApiError.conflict('No se puede cancelar una reserva que ya finalizo');
+  }
+
+  await query(
+    'UPDATE reserva SET estado = $1 WHERE id_reserva = $2 AND id_conductor = $3',
+    [ESTADOS_RESERVA.CANCELADA, idReserva, idConductor],
+  );
+
+  const { rows: detalle } = await query(
+    `${SELECT_RESERVA_DETALLE} WHERE r.id_reserva = $1`,
+    [idReserva],
+  );
+  return detalle[0];
 }

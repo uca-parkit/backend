@@ -18,4 +18,11 @@ router.post(
 
 router.get('/', authenticate, requireRole(ROLES.CONDUCTOR), reservaController.listarMias);
 
+router.patch(
+  '/:id/cancelar',
+  authenticate,
+  requireRole(ROLES.CONDUCTOR),
+  reservaController.cancelar,
+);
+
 export default router;
