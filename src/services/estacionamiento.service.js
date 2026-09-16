@@ -183,7 +183,8 @@ export async function obtenerPorId(idEstacionamiento) {
 /** Verifica que el estacionamiento exista y sea del propietario autenticado. */
 export async function asegurarPropiedad(idEstacionamiento, idPropietario) {
   const { rows } = await query(
-    'SELECT id_estacionamiento, id_propietario FROM estacionamiento WHERE id_estacionamiento = $1',
+    `SELECT id_estacionamiento, id_propietario, activo
+       FROM estacionamiento WHERE id_estacionamiento = $1`,
     [idEstacionamiento],
   );
 
@@ -211,7 +212,8 @@ export async function listarPorPropietario(idPropietario) {
  * cargados: es lo que espera la pantalla, que manda la semana completa.
  */
 export async function actualizar(idEstacionamiento, idPropietario, datos) {
-  await asegurarPropiedad(idEstacionamiento, idPropietario);
+  const { activo } = await asegurarPropiedad(idEstacionamiento, idPropietario);
+  if (!activo) throw ApiError.conflict('El estacionamiento esta dado de baja');
 
   await withTransaction(async (client) => {
     const asignaciones = [];
