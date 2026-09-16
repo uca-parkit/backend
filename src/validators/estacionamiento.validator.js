@@ -7,6 +7,10 @@ const CAMPOS_EDITABLES = [
   'barrio_zona', 'latitud', 'longitud', 'telefono_contacto', 'email_contacto',
   'tarifa_hora', 'cubierto', 'publicado', 'horarios',
 ];
+const CAMPOS_BORRABLES = [
+  'descripcion', 'codigo_postal', 'barrio_zona', 'latitud', 'longitud',
+  'telefono_contacto', 'email_contacto',
+];
 const CAMPOS_COCHERA_EDITABLES = [
   'identificador',
   'id_tipo_vehiculo',
@@ -121,6 +125,11 @@ export function validarCambiosEstacionamiento(body) {
     );
 
   const { valores, errores } = validador.resultado();
+
+  // Un null (o un texto vacio) borra el dato opcional en vez de ignorarlo.
+  for (const campo of CAMPOS_BORRABLES) {
+    if (body[campo] === null || body[campo] === '') valores[campo] = null;
+  }
 
   if (body.horarios !== undefined) {
     valores.horarios = validarHorarios(body.horarios, errores);
