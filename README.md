@@ -161,6 +161,8 @@ Autenticacion: `Authorization: Bearer <token>`.
 | POST   | `/api/auth/register` | publico  | Alta con rol CONDUCTOR o PROPIETARIO |
 | POST   | `/api/auth/login`    | publico  | Devuelve usuario + JWT               |
 | GET    | `/api/auth/me`       | token    | Perfil del usuario autenticado       |
+| PATCH  | `/api/auth/me`       | token    | Edita datos, contrasena y perfiles habilitados |
+| DELETE | `/api/auth/me`       | token    | Baja de la cuenta (logica)           |
 | POST   | `/api/auth/rol`      | token    | Cambia el perfil activo y devuelve un token nuevo |
 
 El usuario tiene un perfil activo (`rol`) y la lista de los que puede usar
@@ -170,7 +172,23 @@ falla con `403` si se pide uno que no esta en `roles`.
 ```jsonc
 // POST /api/auth/rol
 { "rol": "PROPIETARIO" }
+
+// PATCH /api/auth/me  (todo opcional; devuelve usuario + token nuevo)
+{ "nombre": "Ana", "telefono": "1155667788",
+  "roles": ["CONDUCTOR", "PROPIETARIO"],
+  "password": "nuevaClave123", "passwordActual": "secreto123" }
 ```
+
+Para cambiar la contrasena hay que mandar tambien `passwordActual` (`401` si no
+coincide). Si se quita el perfil activo queda activo el primero de los que
+sigan habilitados, y por eso la respuesta trae un token nuevo.
+
+`DELETE /api/auth/me` es una baja logica: cancela las reservas del usuario que
+todavia no pasaron (las que hizo y las que recibio en sus cocheras), desactiva
+sus vehiculos y estacionamientos, y marca la cuenta como inactiva. El historial
+queda. Despues de la baja el token deja de servir: `authenticate` verifica en
+cada request que la cuenta siga activa y que el perfil del token siga
+habilitado.
 
 ```jsonc
 // POST /api/auth/register
