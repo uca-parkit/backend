@@ -19,9 +19,3 @@ export function validarLogin(body) {
     .texto('password', body.password, { min: 1, max: 72 })
     .resultado();
 }
-
-export function validarCambioRol(body) {
-  return campos(body)
-    .enumerado('rol', body.rol, Object.values(ROLES))
-    .resultado();
-}
