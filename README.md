@@ -29,14 +29,41 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 | `npm run db:migrate`      | Aplica `schema.sql` + `seed.sql` leyendo `.env`     |
 | `npm run db:migrate:prod` | Igual, pero tomando las env vars del entorno        |
 | `npm run db:demo`         | Carga datos de ejemplo (no corre en produccion)     |
+| `npm test`                | Pruebas de la API (ver mas abajo)                   |
+| `npm run test:ci`         | Igual, pero sin leer `.env` (las vars ya estan)     |
 
 `db:migrate` deja los usuarios de prueba del equipo: `conductor@test.com` y
 `propietario@test.com` (password `demo1234`), con los dos perfiles habilitados,
 un estacionamiento y sus cocheras. Son los accesos que ofrece el front.
 
 `db:demo` agrega ademas `propietario@parkit.com` y `conductor@parkit.com` (misma
-password) con dos estacionamientos, 14 cocheras y dos vehiculos. Es el juego de
-datos que usan las pruebas de la API.
+password) con dos estacionamientos, 14 cocheras y dos vehiculos.
+
+### Pruebas
+
+```bash
+npm test
+```
+
+Son **pruebas de integracion** con el runner que trae Node (`node --test`), sin
+dependencias extra. Cada archivo de `pruebas/` levanta la API en un puerto libre
+dentro del mismo proceso, asi que no hace falta tener el servidor corriendo:
+alcanza con que `DATABASE_URL` apunte a una base ya migrada.
+
+| Archivo                          | Que cubre                                              |
+| -------------------------------- | ------------------------------------------------------ |
+| `auth.test.mjs`                  | Registro, login, perfil, roles y baja de cuenta         |
+| `vehiculo.test.mjs`              | ABM de vehiculos y vehiculo predeterminado              |
+| `estacionamiento.test.mjs`       | ABM, publicacion, baja en cascada y cocheras            |
+| `reserva.test.mjs`               | Reservas, solapamientos, concurrencia y ciclo completo  |
+
+Las pruebas **no dependen de los datos de ejemplo**: cada una crea sus propios
+usuarios (con email `...@<suite>.prueba.parkit`) y al terminar borra todo lo que
+creo. Por eso se pueden correr las veces que haga falta, incluso contra una base
+con datos, sin ensuciarla.
+
+`pruebas/ayuda.mjs` tiene lo compartido: el cliente HTTP, los atajos para crear
+usuarios, estacionamientos y vehiculos, y la limpieza final.
 
 ### Variables de entorno
 
