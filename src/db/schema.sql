@@ -197,6 +197,12 @@ ALTER TABLE estacionamiento
   ADD COLUMN IF NOT EXISTS codigo_postal VARCHAR(10),
   ADD COLUMN IF NOT EXISTS cubierto      BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Perfiles habilitados del usuario: `rol` es el activo y `roles` los que puede usar.
+ALTER TABLE usuario
+  ADD COLUMN IF NOT EXISTS roles rol_usuario[] NOT NULL DEFAULT '{}';
+
+UPDATE usuario SET roles = ARRAY[rol] WHERE cardinality(roles) = 0;
+
 ALTER TABLE cochera
   ADD COLUMN IF NOT EXISTS sector   VARCHAR(20),
   ADD COLUMN IF NOT EXISTS cubierta BOOLEAN NOT NULL DEFAULT FALSE;

@@ -30,20 +30,24 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 | `npm run db:migrate:prod` | Igual, pero tomando las env vars del entorno        |
 | `npm run db:demo`         | Carga datos de ejemplo (no corre en produccion)     |
 
-`db:demo` crea `propietario@parkit.com` y `conductor@parkit.com` (password
-`demo1234`), dos estacionamientos publicados con horarios y cocheras, y dos
-vehiculos del conductor. Son los mismos accesos de prueba que ofrece el front.
+`db:migrate` deja los usuarios de prueba del equipo: `conductor@test.com` y
+`propietario@test.com` (password `demo1234`), con los dos perfiles habilitados,
+un estacionamiento y sus cocheras. Son los accesos que ofrece el front.
+
+`db:demo` agrega ademas `propietario@parkit.com` y `conductor@parkit.com` (misma
+password) con dos estacionamientos, 14 cocheras y dos vehiculos. Es el juego de
+datos que usan las pruebas de la API.
 
 ### Variables de entorno
 
 | Variable            | Obligatoria | Default         | Notas                                              |
 | ------------------- | ----------- | --------------- | -------------------------------------------------- |
-| `DATABASE_URL`      | si          | —               | En Railway la inyecta el servicio Postgres          |
+| `DATABASE_URL`      | si          | —               | Neon: la cadena que da el panel, con `?sslmode=require` |
 | `JWT_SECRET`        | si          | —               | Cadena larga y aleatoria                            |
 | `PORT`              | no          | `3000`          | Railway la define automaticamente                   |
 | `NODE_ENV`          | no          | `development`   |                                                     |
 | `API_PREFIX`        | no          | `/api`          |                                                     |
-| `DATABASE_SSL`      | no          | `true` en prod  | `true` para proveedores administrados               |
+| `DATABASE_SSL`      | no          | `true` en prod  | `true` con Neon o cualquier proveedor administrado  |
 | `DATABASE_POOL_MAX` | no          | `10`            | Conexiones maximas del pool                         |
 | `JWT_EXPIRES_IN`    | no          | `1d`            |                                                     |
 | `BCRYPT_ROUNDS`     | no          | `10`            |                                                     |
@@ -157,6 +161,16 @@ Autenticacion: `Authorization: Bearer <token>`.
 | POST   | `/api/auth/register` | publico  | Alta con rol CONDUCTOR o PROPIETARIO |
 | POST   | `/api/auth/login`    | publico  | Devuelve usuario + JWT               |
 | GET    | `/api/auth/me`       | token    | Perfil del usuario autenticado       |
+| POST   | `/api/auth/rol`      | token    | Cambia el perfil activo y devuelve un token nuevo |
+
+El usuario tiene un perfil activo (`rol`) y la lista de los que puede usar
+(`roles`). Al registrarse queda habilitado solo el elegido; `POST /api/auth/rol`
+falla con `403` si se pide uno que no esta en `roles`.
+
+```jsonc
+// POST /api/auth/rol
+{ "rol": "PROPIETARIO" }
+```
 
 ```jsonc
 // POST /api/auth/register

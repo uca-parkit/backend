@@ -5,8 +5,10 @@ import { query } from '../config/database.js';
 import { ApiError } from '../utils/ApiError.js';
 import { firmarToken } from '../utils/jwt.js';
 
+// `roles` va como text[]: el driver no sabe leer arreglos de un ENUM propio y
+// los devolveria como el texto crudo '{CONDUCTOR,PROPIETARIO}'.
 const CAMPOS_PUBLICOS = `
-  id_usuario, nombre, apellido, email, rol, telefono, activo, created_at
+  id_usuario, nombre, apellido, email, rol, roles::text[] AS roles, telefono, activo, created_at
 `;
 
 const VIOLACION_UNIQUE = '23505';
@@ -17,8 +19,8 @@ export async function registrar({ nombre, apellido, email, password, rol, telefo
   let usuario;
   try {
     const { rows } = await query(
-      `INSERT INTO usuario (nombre, apellido, email, password_hash, rol, telefono)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO usuario (nombre, apellido, email, password_hash, rol, roles, telefono)
+       VALUES ($1, $2, $3, $4, $5, ARRAY[$5]::rol_usuario[], $6)
        RETURNING ${CAMPOS_PUBLICOS}`,
       [nombre, apellido, email, passwordHash, rol, telefono],
     );
@@ -66,4 +68,23 @@ export async function obtenerPerfil(idUsuario) {
 
   if (!rows[0]) throw ApiError.notFound('Usuario no encontrado');
   return rows[0];
+}
+
+/**
+ * Cambia el perfil activo entre los que el usuario tiene habilitados y devuelve
+ * un token nuevo: el rol viaja firmado, asi que el anterior deja de servir.
+ */
+export async function cambiarRol(idUsuario, rolNuevo) {
+  const usuario = await obtenerPerfil(idUsuario);
+
+  if (!usuario.roles.includes(rolNuevo)) {
+    throw ApiError.forbidden(`El usuario no tiene habilitado el perfil ${rolNuevo}`);
+  }
+
+  const { rows } = await query(
+    `UPDATE usuario SET rol = $1 WHERE id_usuario = $2 RETURNING ${CAMPOS_PUBLICOS}`,
+    [rolNuevo, idUsuario],
+  );
+
+  return { usuario: rows[0], token: firmarToken(rows[0]) };
 }
