@@ -11,9 +11,15 @@ import { asegurarPropiedad } from './estacionamiento.service.js';
 
 const VIOLACION_EXCLUSION = '23P01';
 
+// El vehiculo puede llegar hasta 30 minutos antes de su franja.
+const MARGEN_INGRESO_MS = 30 * 60 * 1000;
+
 /** Reserva con todo lo que muestran los listados, incluido el precio total. */
 const SELECT_DETALLE = `
-  SELECT r.id_reserva, r.id_conductor, r.inicio, r.fin, r.estado, r.created_at,
+  SELECT r.id_reserva, r.id_conductor, r.inicio, r.fin, r.created_at,
+         r.ingreso_real, r.egreso_real,
+         CASE WHEN r.estado = 'CONFIRMADA' AND r.ingreso_real IS NOT NULL
+              THEN 'EN_CURSO' ELSE r.estado::text END AS estado,
          r.id_vehiculo, v.patente, v.marca, v.modelo, v.id_tipo_vehiculo,
          r.id_cochera, c.identificador AS cochera,
          c.sector AS cochera_sector, c.cubierta AS cochera_cubierta,
@@ -294,7 +300,8 @@ export async function listarPorEstacionamiento(idEstacionamiento, idPropietario,
 export async function cancelar(idReserva, idConductor) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      'SELECT id_conductor, estado, fin FROM reserva WHERE id_reserva = $1 FOR UPDATE',
+      `SELECT id_conductor, estado, fin, ingreso_real
+         FROM reserva WHERE id_reserva = $1 FOR UPDATE`,
       [idReserva],
     );
 
@@ -303,6 +310,7 @@ export async function cancelar(idReserva, idConductor) {
     if (reserva.id_conductor !== idConductor) {
       throw ApiError.forbidden('La reserva pertenece a otro conductor');
     }
+    if (reserva.ingreso_real) throw ApiError.conflict('La reserva ya esta en curso');
     if (!ESTADOS_VIGENTES.includes(reserva.estado)) {
       throw ApiError.conflict(`La reserva ya esta ${reserva.estado.toLowerCase()}`);
     }
@@ -313,6 +321,107 @@ export async function cancelar(idReserva, idConductor) {
     await client.query('UPDATE reserva SET estado = $1 WHERE id_reserva = $2', [
       ESTADOS_RESERVA.CANCELADA,
       idReserva,
+    ]);
+
+    return obtenerDetalle(client, idReserva);
+  });
+}
+
+/* -------------------------- ciclo de la reserva ---------------------------
+   El propietario la confirma, despues registra el ingreso del vehiculo y por
+   ultimo el egreso, que la finaliza y libera la cochera:
+
+     PENDIENTE -> CONFIRMADA -> (ingreso) EN_CURSO -> (egreso) FINALIZADA
+
+   "EN_CURSO" no es un estado de la base: es una reserva CONFIRMADA con
+   `ingreso_real` cargado. El conductor puede cancelar hasta el ingreso.
+-------------------------------------------------------------------------- */
+
+/** Bloquea la reserva y verifica que la cochera sea de un estacionamiento propio. */
+async function bloquearReservaDelPropietario(client, idReserva, idPropietario) {
+  const { rows } = await client.query(
+    `SELECT r.id_reserva, r.estado, r.inicio, r.fin, r.ingreso_real, r.egreso_real,
+            r.id_cochera, e.id_propietario
+       FROM reserva r
+       JOIN cochera c         ON c.id_cochera = r.id_cochera
+       JOIN estacionamiento e ON e.id_estacionamiento = c.id_estacionamiento
+      WHERE r.id_reserva = $1
+      FOR UPDATE OF r`,
+    [idReserva],
+  );
+
+  const reserva = rows[0];
+  if (!reserva) throw ApiError.notFound('La reserva no existe');
+  if (reserva.id_propietario !== idPropietario) {
+    throw ApiError.forbidden('La reserva es de otro estacionamiento');
+  }
+  return reserva;
+}
+
+/** El propietario acepta una reserva pendiente. */
+export async function confirmar(idReserva, idPropietario) {
+  return withTransaction(async (client) => {
+    const reserva = await bloquearReservaDelPropietario(client, idReserva, idPropietario);
+
+    if (reserva.estado !== ESTADOS_RESERVA.PENDIENTE) {
+      throw ApiError.conflict(`La reserva ya esta ${reserva.estado.toLowerCase()}`);
+    }
+    if (reserva.fin <= new Date()) throw ApiError.conflict('La reserva ya termino');
+
+    await client.query('UPDATE reserva SET estado = $1 WHERE id_reserva = $2', [
+      ESTADOS_RESERVA.CONFIRMADA,
+      idReserva,
+    ]);
+
+    return obtenerDetalle(client, idReserva);
+  });
+}
+
+/** Llego el vehiculo: se guarda la hora y la cochera pasa a OCUPADA. */
+export async function registrarIngreso(idReserva, idPropietario) {
+  return withTransaction(async (client) => {
+    const reserva = await bloquearReservaDelPropietario(client, idReserva, idPropietario);
+
+    if (reserva.estado !== ESTADOS_RESERVA.CONFIRMADA) {
+      throw ApiError.conflict(
+        reserva.estado === ESTADOS_RESERVA.PENDIENTE
+          ? 'Primero hay que confirmar la reserva'
+          : `La reserva esta ${reserva.estado.toLowerCase()}`,
+      );
+    }
+    if (reserva.ingreso_real) throw ApiError.conflict('El ingreso ya estaba registrado');
+
+    const ahora = Date.now();
+    if (ahora < reserva.inicio.getTime() - MARGEN_INGRESO_MS) {
+      throw ApiError.conflict('Todavia es muy temprano para registrar el ingreso');
+    }
+    if (ahora > reserva.fin.getTime()) throw ApiError.conflict('La franja de la reserva ya termino');
+
+    await client.query('UPDATE reserva SET ingreso_real = now() WHERE id_reserva = $1', [idReserva]);
+    await client.query('UPDATE cochera SET estado_actual = $1 WHERE id_cochera = $2', [
+      ESTADOS_COCHERA.OCUPADA,
+      reserva.id_cochera,
+    ]);
+
+    return obtenerDetalle(client, idReserva);
+  });
+}
+
+/** Se fue el vehiculo: la reserva queda FINALIZADA y la cochera libre. */
+export async function registrarEgreso(idReserva, idPropietario) {
+  return withTransaction(async (client) => {
+    const reserva = await bloquearReservaDelPropietario(client, idReserva, idPropietario);
+
+    if (!reserva.ingreso_real) throw ApiError.conflict('La reserva todavia no tiene ingreso');
+    if (reserva.egreso_real) throw ApiError.conflict('El egreso ya estaba registrado');
+
+    await client.query(
+      'UPDATE reserva SET egreso_real = now(), estado = $1 WHERE id_reserva = $2',
+      [ESTADOS_RESERVA.FINALIZADA, idReserva],
+    );
+    await client.query('UPDATE cochera SET estado_actual = $1 WHERE id_cochera = $2', [
+      ESTADOS_COCHERA.LIBRE,
+      reserva.id_cochera,
     ]);
 
     return obtenerDetalle(client, idReserva);

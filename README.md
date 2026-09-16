@@ -265,6 +265,9 @@ atencion, ya empezo o no quedan cocheras libres.
 | POST   | `/api/reservas`             | CONDUCTOR | Crea una reserva                     |
 | GET    | `/api/reservas`             | CONDUCTOR | Sus reservas                         |
 | PATCH  | `/api/reservas/:id/cancelar`| CONDUCTOR | Cancela una reserva propia vigente   |
+| PATCH  | `/api/reservas/:id/confirmar`| PROPIETARIO | Acepta una reserva pendiente       |
+| PATCH  | `/api/reservas/:id/ingreso` | PROPIETARIO | Registra la llegada del vehiculo   |
+| PATCH  | `/api/reservas/:id/egreso`  | PROPIETARIO | Registra la salida y la finaliza   |
 
 ```jsonc
 // POST /api/vehiculos
@@ -293,6 +296,25 @@ estacionamiento tiene horarios cargados).
 
 Las reservas se devuelven con el detalle resuelto: patente, cochera,
 estacionamiento, `precio_total` (horas × tarifa) y nombre del conductor.
+
+#### Ciclo de la reserva
+
+```
+PENDIENTE --confirmar--> CONFIRMADA --ingreso--> EN_CURSO --egreso--> FINALIZADA
+     |                        |
+     +--------cancelar--------+--> CANCELADA
+```
+
+Las tres transiciones las hace el **propietario de la cochera**; el conductor
+solo cancela, y puede hacerlo hasta que se registre el ingreso.
+
+- **`EN_CURSO` no existe en la base:** es una reserva `CONFIRMADA` con
+  `ingreso_real` cargado. El `SELECT` lo resuelve, asi que los EXCLUDE de
+  solapamiento siguen mirando `PENDIENTE`/`CONFIRMADA` sin cambios.
+- El **ingreso** se acepta desde 30 minutos antes de `inicio` hasta `fin`, y
+  deja la cochera en `OCUPADA`.
+- El **egreso** guarda `egreso_real`, pasa la reserva a `FINALIZADA` y devuelve
+  la cochera a `LIBRE`. Se puede registrar aunque la franja ya haya terminado.
 
 ### Formato de errores
 
@@ -379,6 +401,7 @@ la validacion transaccional se mantiene.
 - [x] Registro de vehiculos del conductor
 - [x] Consulta de estacionamientos publicados
 - [x] Creacion de reservas con vehiculo, fecha y franja horaria
+- [x] Ciclo de la reserva: confirmar, ingreso, egreso y finalizacion
 
-Pendiente: confirmar, registrar ingreso/egreso y finalizar reservas;
+Pendiente: tiempo real con Socket.IO, busqueda por cercania, metricas y
 normalizacion de `EXCEPCION`.

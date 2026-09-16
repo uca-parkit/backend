@@ -232,3 +232,10 @@ EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'No se pudo crear el EXCLUDE constraint reserva_vehiculo_sin_solapamiento: %', SQLERRM;
 END
 $$;
+
+-- Ciclo de la reserva: el propietario confirma, y despues registra el ingreso
+-- y el egreso del vehiculo. "En curso" es una reserva CONFIRMADA con ingreso
+-- registrado; el egreso la pasa a FINALIZADA.
+ALTER TABLE reserva
+  ADD COLUMN IF NOT EXISTS ingreso_real TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS egreso_real  TIMESTAMPTZ;
