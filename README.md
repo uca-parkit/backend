@@ -207,6 +207,8 @@ habilitado.
 | GET    | `/api/estacionamientos/mios`                     | PROPIETARIO | Los del propietario autenticado          |
 | GET    | `/api/estacionamientos/:id/reservas`             | PROPIETARIO | Reservas recibidas (`?fecha=YYYY-MM-DD`) |
 | POST   | `/api/estacionamientos`                          | PROPIETARIO | Alta (queda vinculado a su id)           |
+| PATCH  | `/api/estacionamientos/:id`                      | PROPIETARIO | Modifica datos, horarios y publicacion   |
+| DELETE | `/api/estacionamientos/:id`                      | PROPIETARIO | Baja logica en cascada                   |
 | POST   | `/api/estacionamientos/:id/cocheras`             | PROPIETARIO | Alta de cochera (valida propiedad)       |
 | PATCH  | `/api/estacionamientos/:id/cocheras/:idCochera`  | PROPIETARIO | Modifica identificador, tipo o estado    |
 | DELETE | `/api/estacionamientos/:id/cocheras/:idCochera`  | PROPIETARIO | Baja logica (`activo = false`)           |
@@ -228,6 +230,9 @@ Los listados y el detalle traen tambien `cocheras_activas`, `cocheras_libres`
   "tarifa_hora": 1500.5, "cubierto": true, "publicado": true,
   "horarios": [ { "dia_semana": 1, "hora_apertura": "08:00", "hora_cierre": "20:00" } ] }
 
+// PATCH /api/estacionamientos/:id  (al menos un campo; los horarios se reemplazan)
+{ "tarifa_hora": 1800, "publicado": false }
+
 // POST /api/estacionamientos/:id/cocheras
 { "identificador": "A-01", "id_tipo_vehiculo": 1, "sector": "A", "cubierta": true,
   "estado_actual": "LIBRE" }
@@ -241,6 +246,11 @@ Los listados y el detalle traen tambien `cocheras_activas`, `cocheras_libres`
                  "inicio": "2026-09-15T11:00:00.000Z", "fin": "2026-09-15T13:00:00.000Z",
                  "disponible": true, "cocheras_libres": 4, "motivo": null } ] }
 ```
+
+`publicado` controla si aparece en la busqueda: ponerlo en `false` lo saca del
+listado sin perder nada. El `DELETE` es la baja definitiva: cancela las reservas
+que todavia no empezaron, desactiva las cocheras y deja el estacionamiento en
+`activo = false` (las reservas historicas se conservan).
 
 `motivo` explica por que una franja no se puede reservar: fuera del horario de
 atencion, ya empezo o no quedan cocheras libres.
@@ -364,11 +374,11 @@ la validacion transaccional se mantiene.
 
 - [x] Nombre de la aplicacion: **Parkit** (UCAio es la software factory)
 - [x] Registro y login con roles Conductor y Propietario
-- [x] Alta de estacionamientos con nombre, direccion, horarios y contacto
+- [x] ABM de estacionamientos con nombre, direccion, horarios y contacto
 - [x] ABM de cocheras con identificador y tipo de vehiculo admitido
 - [x] Registro de vehiculos del conductor
 - [x] Consulta de estacionamientos publicados
 - [x] Creacion de reservas con vehiculo, fecha y franja horaria
 
-Pendiente: modificacion y baja de usuarios, estacionamientos y vehiculos;
-confirmar y finalizar reservas; normalizacion de `EXCEPCION`.
+Pendiente: confirmar, registrar ingreso/egreso y finalizar reservas;
+normalizacion de `EXCEPCION`.

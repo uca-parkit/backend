@@ -7,6 +7,7 @@ import { ROLES } from '../utils/roles.js';
 import {
   validarActualizacionCochera,
   validarBusqueda,
+  validarCambiosEstacionamiento,
   validarCochera,
   validarDisponibilidad,
   validarEstacionamiento,
@@ -45,6 +46,15 @@ router.post(
   validate(validarEstacionamiento),
   estacionamientoController.crear,
 );
+
+router.patch(
+  '/:id',
+  ...soloPropietario,
+  validate(validarCambiosEstacionamiento),
+  estacionamientoController.actualizar,
+);
+
+router.delete('/:id', ...soloPropietario, estacionamientoController.darDeBaja);
 
 router.post(
   '/:id/cocheras',

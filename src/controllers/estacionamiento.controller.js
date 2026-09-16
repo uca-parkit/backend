@@ -30,6 +30,20 @@ export const listarMios = asyncHandler(async (req, res) => {
   res.json({ estacionamientos });
 });
 
+export const actualizar = asyncHandler(async (req, res) => {
+  const estacionamiento = await estacionamientoService.actualizar(
+    req.params.id,
+    req.usuario.id,
+    req.body,
+  );
+  res.json({ estacionamiento });
+});
+
+export const darDeBaja = asyncHandler(async (req, res) => {
+  const estacionamiento = await estacionamientoService.darDeBaja(req.params.id, req.usuario.id);
+  res.json({ estacionamiento });
+});
+
 export const crearCochera = asyncHandler(async (req, res) => {
   const cochera = await cocheraService.crear(req.params.id, req.usuario.id, req.body);
   res.status(201).json({ cochera });

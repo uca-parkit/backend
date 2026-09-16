@@ -2,6 +2,11 @@ import { ESTADOS_COCHERA } from '../utils/roles.js';
 import { campos } from './helpers.js';
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const CAMPOS_EDITABLES = [
+  'nombre', 'descripcion', 'calle', 'numero', 'ciudad', 'provincia', 'codigo_postal',
+  'barrio_zona', 'latitud', 'longitud', 'telefono_contacto', 'email_contacto',
+  'tarifa_hora', 'cubierto', 'publicado', 'horarios',
+];
 const CAMPOS_COCHERA_EDITABLES = [
   'identificador',
   'id_tipo_vehiculo',
@@ -86,6 +91,42 @@ function validarHorarios(horarios, errores) {
   });
 
   return normalizados;
+}
+
+/**
+ * PATCH de estacionamiento: todo opcional, pero tiene que venir al menos un
+ * campo. Si vienen `horarios` reemplazan a los cargados.
+ */
+export function validarCambiosEstacionamiento(body) {
+  const validador = campos(body)
+    .texto('nombre', body.nombre, { requerido: false, min: 3, max: 120 })
+    .texto('descripcion', body.descripcion, { requerido: false, max: 500 })
+    .texto('calle', body.calle, { requerido: false, min: 2, max: 120 })
+    .texto('numero', body.numero, { requerido: false, min: 1, max: 10 })
+    .texto('ciudad', body.ciudad, { requerido: false, min: 2, max: 80 })
+    .texto('provincia', body.provincia, { requerido: false, min: 2, max: 80 })
+    .texto('codigo_postal', body.codigo_postal, { requerido: false, max: 10 })
+    .texto('barrio_zona', body.barrio_zona, { requerido: false, max: 120 })
+    .numero('latitud', body.latitud, { requerido: false, min: -90, max: 90 })
+    .numero('longitud', body.longitud, { requerido: false, min: -180, max: 180 })
+    .texto('telefono_contacto', body.telefono_contacto, { requerido: false, max: 30 })
+    .email('email_contacto', body.email_contacto, { requerido: false })
+    .numero('tarifa_hora', body.tarifa_hora, { requerido: false, min: 0 })
+    .booleano('cubierto', body.cubierto, { requerido: false })
+    .booleano('publicado', body.publicado, { requerido: false })
+    .verificar(
+      CAMPOS_EDITABLES.some((campo) => body[campo] !== undefined),
+      'body',
+      `enviar al menos uno de: ${CAMPOS_EDITABLES.join(', ')}`,
+    );
+
+  const { valores, errores } = validador.resultado();
+
+  if (body.horarios !== undefined) {
+    valores.horarios = validarHorarios(body.horarios, errores);
+  }
+
+  return { valores, errores };
 }
 
 export function validarCochera(body) {

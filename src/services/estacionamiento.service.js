@@ -1,5 +1,6 @@
 import { query, withTransaction } from '../config/database.js';
 import { ApiError } from '../utils/ApiError.js';
+import { ESTADOS_COCHERA, ESTADOS_VIGENTES } from '../utils/roles.js';
 import { listarPorEstacionamiento as listarCocheras } from './cochera.service.js';
 
 const COLUMNAS = [
@@ -7,6 +8,12 @@ const COLUMNAS = [
   'calle', 'numero', 'ciudad', 'provincia', 'codigo_postal', 'barrio_zona',
   'latitud', 'longitud', 'telefono_contacto', 'email_contacto', 'tarifa_hora',
   'cubierto', 'publicado', 'activo',
+];
+
+const CAMPOS_EDITABLES = [
+  'nombre', 'descripcion', 'calle', 'numero', 'ciudad', 'provincia', 'codigo_postal',
+  'barrio_zona', 'latitud', 'longitud', 'telefono_contacto', 'email_contacto',
+  'tarifa_hora', 'cubierto', 'publicado',
 ];
 
 const CAMPOS = COLUMNAS.join(', ');
@@ -76,25 +83,31 @@ export async function crear(idPropietario, datos) {
     );
 
     const estacionamiento = rows[0];
-    estacionamiento.horarios = [];
-
-    for (const horario of datos.horarios ?? []) {
-      const { rows: filas } = await client.query(
-        `INSERT INTO horario (id_estacionamiento, dia_semana, hora_apertura, hora_cierre)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id_horario, dia_semana, hora_apertura, hora_cierre`,
-        [
-          estacionamiento.id_estacionamiento,
-          horario.dia_semana,
-          horario.hora_apertura,
-          horario.hora_cierre,
-        ],
-      );
-      estacionamiento.horarios.push(filas[0]);
-    }
+    estacionamiento.horarios = await insertarHorarios(
+      client,
+      estacionamiento.id_estacionamiento,
+      datos.horarios,
+    );
 
     return estacionamiento;
   });
+}
+
+/** Carga los horarios de un estacionamiento dentro de la transaccion abierta. */
+async function insertarHorarios(client, idEstacionamiento, horarios) {
+  const cargados = [];
+
+  for (const horario of horarios ?? []) {
+    const { rows } = await client.query(
+      `INSERT INTO horario (id_estacionamiento, dia_semana, hora_apertura, hora_cierre)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id_horario, dia_semana, hora_apertura, hora_cierre`,
+      [idEstacionamiento, horario.dia_semana, horario.hora_apertura, horario.hora_cierre],
+    );
+    cargados.push(rows[0]);
+  }
+
+  return cargados;
 }
 
 /**
@@ -191,4 +204,91 @@ export async function listarPorPropietario(idPropietario) {
     [idPropietario],
   );
   return rows;
+}
+
+/**
+ * Modifica los datos del estacionamiento. Si vienen `horarios` reemplazan a los
+ * cargados: es lo que espera la pantalla, que manda la semana completa.
+ */
+export async function actualizar(idEstacionamiento, idPropietario, datos) {
+  await asegurarPropiedad(idEstacionamiento, idPropietario);
+
+  await withTransaction(async (client) => {
+    const asignaciones = [];
+    const parametros = [];
+
+    for (const campo of CAMPOS_EDITABLES) {
+      if (datos[campo] === undefined) continue;
+      parametros.push(datos[campo]);
+      asignaciones.push(`${campo} = $${parametros.length}`);
+    }
+
+    if (asignaciones.length > 0) {
+      parametros.push(idEstacionamiento);
+      await client.query(
+        `UPDATE estacionamiento SET ${asignaciones.join(', ')}
+          WHERE id_estacionamiento = $${parametros.length}`,
+        parametros,
+      );
+    }
+
+    // `direccion` es calle + numero: se rearma con los valores ya guardados.
+    if (datos.calle !== undefined || datos.numero !== undefined) {
+      await client.query(
+        `UPDATE estacionamiento SET direccion = calle || ' ' || numero
+          WHERE id_estacionamiento = $1`,
+        [idEstacionamiento],
+      );
+    }
+
+    if (datos.horarios !== undefined) {
+      await client.query('DELETE FROM horario WHERE id_estacionamiento = $1', [idEstacionamiento]);
+      await insertarHorarios(client, idEstacionamiento, datos.horarios);
+    }
+  });
+
+  return obtenerPorId(idEstacionamiento);
+}
+
+/**
+ * Baja logica: las cocheras tienen reservas historicas (FK RESTRICT), asi que
+ * se desactiva todo en cascada y se cancelan las reservas que todavia no
+ * empezaron. Para sacarlo del listado sin darlo de baja alcanza con
+ * `PATCH { publicado: false }`.
+ */
+export async function darDeBaja(idEstacionamiento, idPropietario) {
+  await asegurarPropiedad(idEstacionamiento, idPropietario);
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT activo FROM estacionamiento WHERE id_estacionamiento = $1 FOR UPDATE',
+      [idEstacionamiento],
+    );
+
+    if (!rows[0].activo) throw ApiError.conflict('El estacionamiento ya esta dado de baja');
+
+    await client.query(
+      `UPDATE reserva r SET estado = 'CANCELADA'
+         FROM cochera c
+        WHERE c.id_cochera = r.id_cochera
+          AND c.id_estacionamiento = $1
+          AND r.estado = ANY($2::estado_reserva[])
+          AND r.fin > now()`,
+      [idEstacionamiento, ESTADOS_VIGENTES],
+    );
+
+    await client.query(
+      'UPDATE cochera SET activo = FALSE, estado_actual = $1 WHERE id_estacionamiento = $2',
+      [ESTADOS_COCHERA.INACTIVA, idEstacionamiento],
+    );
+
+    const { rows: actualizado } = await client.query(
+      `UPDATE estacionamiento SET activo = FALSE, publicado = FALSE
+        WHERE id_estacionamiento = $1
+        RETURNING ${CAMPOS}`,
+      [idEstacionamiento],
+    );
+
+    return actualizado[0];
+  });
 }
