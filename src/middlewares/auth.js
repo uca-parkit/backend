@@ -1,11 +1,16 @@
+import { query } from '../config/database.js';
 import { ApiError } from '../utils/ApiError.js';
 import { verificarToken } from '../utils/jwt.js';
 
 /**
  * Valida el header `Authorization: Bearer <token>` y deja el usuario
  * autenticado en `req.usuario` ({ id, rol }).
+ *
+ * Ademas confirma contra la base que la cuenta siga activa y que el perfil del
+ * token siga habilitado: un token viejo no tiene que servir despues de una baja
+ * o de un cambio de perfiles.
  */
-export function authenticate(req, _res, next) {
+export async function authenticate(req, _res, next) {
   const header = req.headers.authorization || '';
   const [esquema, token] = header.split(' ');
 
@@ -13,12 +18,31 @@ export function authenticate(req, _res, next) {
     return next(ApiError.unauthorized('Falta el header Authorization: Bearer <token>'));
   }
 
+  let payload;
   try {
-    const payload = verificarToken(token);
-    req.usuario = { id: payload.sub, rol: payload.rol };
-    return next();
+    payload = verificarToken(token);
   } catch {
     return next(ApiError.unauthorized('Token invalido o expirado'));
+  }
+
+  try {
+    const { rows } = await query(
+      'SELECT activo, roles::text[] AS roles FROM usuario WHERE id_usuario = $1',
+      [payload.sub],
+    );
+
+    const usuario = rows[0];
+    if (!usuario || !usuario.activo) {
+      return next(ApiError.unauthorized('La cuenta ya no esta activa'));
+    }
+    if (!usuario.roles.includes(payload.rol)) {
+      return next(ApiError.unauthorized('El perfil de la sesion ya no esta habilitado'));
+    }
+
+    req.usuario = { id: payload.sub, rol: payload.rol };
+    return next();
+  } catch (error) {
+    return next(error);
   }
 }
 

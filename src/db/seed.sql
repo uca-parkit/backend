@@ -116,3 +116,8 @@ VALUES
   ('e1111111-1111-1111-1111-111111111111', 1, 'A5', 'LIBRE', TRUE),
   ('e1111111-1111-1111-1111-111111111111', 1, 'A6', 'RESERVADA', TRUE)
 ON CONFLICT (id_estacionamiento, identificador) DO NOTHING;
+-- Los usuarios de prueba tienen los dos perfiles habilitados para poder
+-- alternar entre conductor y propietario desde la app.
+UPDATE usuario
+   SET roles = ARRAY['CONDUCTOR', 'PROPIETARIO']::rol_usuario[]
+ WHERE email IN ('conductor@test.com', 'propietario@test.com');

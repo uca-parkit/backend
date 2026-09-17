@@ -1,19 +1,49 @@
 import { ESTADOS_COCHERA } from '../utils/roles.js';
 import { campos } from './helpers.js';
 
+const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const CAMPOS_EDITABLES = [
+  'nombre', 'descripcion', 'calle', 'numero', 'ciudad', 'provincia', 'codigo_postal',
+  'barrio_zona', 'latitud', 'longitud', 'telefono_contacto', 'email_contacto',
+  'tarifa_hora', 'cubierto', 'publicado', 'horarios',
+];
+const CAMPOS_BORRABLES = [
+  'descripcion', 'codigo_postal', 'barrio_zona', 'latitud', 'longitud',
+  'telefono_contacto', 'email_contacto',
+];
+const CAMPOS_COCHERA_EDITABLES = [
+  'identificador',
+  'id_tipo_vehiculo',
+  'sector',
+  'cubierta',
+  'estado_actual',
+];
+
 export function validarEstacionamiento(body) {
   const validador = campos(body)
     .texto('nombre', body.nombre, { min: 3, max: 120 })
-    .texto('direccion', body.direccion, { min: 5, max: 200 })
+    .texto('descripcion', body.descripcion, { requerido: false, max: 500 })
+    .texto('calle', body.calle, { min: 2, max: 120 })
+    .texto('numero', body.numero, { min: 1, max: 10 })
+    .texto('ciudad', body.ciudad, { min: 2, max: 80 })
+    .texto('provincia', body.provincia, { min: 2, max: 80 })
+    .texto('codigo_postal', body.codigo_postal, { requerido: false, max: 10 })
     .texto('barrio_zona', body.barrio_zona, { requerido: false, max: 120 })
     .numero('latitud', body.latitud, { requerido: false, min: -90, max: 90 })
     .numero('longitud', body.longitud, { requerido: false, min: -180, max: 180 })
     .texto('telefono_contacto', body.telefono_contacto, { requerido: false, max: 30 })
     .email('email_contacto', body.email_contacto, { requerido: false })
     .numero('tarifa_hora', body.tarifa_hora, { requerido: false, min: 0, default: 0 })
+    .booleano('cubierto', body.cubierto, { requerido: false, default: false })
     .booleano('publicado', body.publicado, { requerido: false, default: false });
 
   const { valores, errores } = validador.resultado();
+
+  // `direccion` se guarda armada para la busqueda por texto y los listados.
+  if (valores.calle && valores.numero) {
+    valores.direccion = `${valores.calle} ${valores.numero}`;
+  }
+
   valores.horarios = validarHorarios(body.horarios, errores);
 
   return { valores, errores };
@@ -67,14 +97,75 @@ function validarHorarios(horarios, errores) {
   return normalizados;
 }
 
+/**
+ * PATCH de estacionamiento: todo opcional, pero tiene que venir al menos un
+ * campo. Si vienen `horarios` reemplazan a los cargados.
+ */
+export function validarCambiosEstacionamiento(body) {
+  const validador = campos(body)
+    .texto('nombre', body.nombre, { requerido: false, min: 3, max: 120 })
+    .texto('descripcion', body.descripcion, { requerido: false, max: 500 })
+    .texto('calle', body.calle, { requerido: false, min: 2, max: 120 })
+    .texto('numero', body.numero, { requerido: false, min: 1, max: 10 })
+    .texto('ciudad', body.ciudad, { requerido: false, min: 2, max: 80 })
+    .texto('provincia', body.provincia, { requerido: false, min: 2, max: 80 })
+    .texto('codigo_postal', body.codigo_postal, { requerido: false, max: 10 })
+    .texto('barrio_zona', body.barrio_zona, { requerido: false, max: 120 })
+    .numero('latitud', body.latitud, { requerido: false, min: -90, max: 90 })
+    .numero('longitud', body.longitud, { requerido: false, min: -180, max: 180 })
+    .texto('telefono_contacto', body.telefono_contacto, { requerido: false, max: 30 })
+    .email('email_contacto', body.email_contacto, { requerido: false })
+    .numero('tarifa_hora', body.tarifa_hora, { requerido: false, min: 0 })
+    .booleano('cubierto', body.cubierto, { requerido: false })
+    .booleano('publicado', body.publicado, { requerido: false })
+    .verificar(
+      CAMPOS_EDITABLES.some((campo) => body[campo] !== undefined),
+      'body',
+      `enviar al menos uno de: ${CAMPOS_EDITABLES.join(', ')}`,
+    );
+
+  const { valores, errores } = validador.resultado();
+
+  // Un null (o un texto vacio) borra el dato opcional en vez de ignorarlo.
+  for (const campo of CAMPOS_BORRABLES) {
+    if (body[campo] === null || body[campo] === '') valores[campo] = null;
+  }
+
+  if (body.horarios !== undefined) {
+    valores.horarios = validarHorarios(body.horarios, errores);
+  }
+
+  return { valores, errores };
+}
+
 export function validarCochera(body) {
   return campos(body)
     .texto('identificador', body.identificador, { min: 1, max: 20 })
     .entero('id_tipo_vehiculo', body.id_tipo_vehiculo, { min: 1 })
+    .texto('sector', body.sector, { requerido: false, max: 20 })
+    .booleano('cubierta', body.cubierta, { requerido: false, default: false })
     .enumerado('estado_actual', body.estado_actual, Object.values(ESTADOS_COCHERA), {
       requerido: false,
       default: ESTADOS_COCHERA.LIBRE,
     })
+    .resultado();
+}
+
+/** PATCH de cochera: todo opcional, pero tiene que venir al menos un campo. */
+export function validarActualizacionCochera(body) {
+  return campos(body)
+    .texto('identificador', body.identificador, { requerido: false, min: 1, max: 20 })
+    .entero('id_tipo_vehiculo', body.id_tipo_vehiculo, { requerido: false, min: 1 })
+    .texto('sector', body.sector, { requerido: false, max: 20 })
+    .booleano('cubierta', body.cubierta, { requerido: false })
+    .enumerado('estado_actual', body.estado_actual, Object.values(ESTADOS_COCHERA), {
+      requerido: false,
+    })
+    .verificar(
+      CAMPOS_COCHERA_EDITABLES.some((campo) => body[campo] !== undefined),
+      'body',
+      `enviar al menos uno de: ${CAMPOS_COCHERA_EDITABLES.join(', ')}`,
+    )
     .resultado();
 }
 
@@ -85,7 +176,42 @@ export function validarBusqueda(query) {
     .texto('zona', query.zona, { requerido: false, max: 120 })
     .entero('id_tipo_vehiculo', query.id_tipo_vehiculo, { requerido: false, min: 1 })
     .numero('tarifa_max', query.tarifa_max, { requerido: false, min: 0 })
+    .booleano('cubierto', query.cubierto, { requerido: false })
     .entero('limit', query.limit, { requerido: false, min: 1, max: 100, default: 20 })
     .entero('offset', query.offset, { requerido: false, min: 0, default: 0 })
     .resultado();
+}
+
+/** GET /api/estacionamientos/:id/disponibilidad?fecha=YYYY-MM-DD[&id_tipo_vehiculo=1] */
+export function validarDisponibilidad(query) {
+  const { valores, errores } = campos(query)
+    .texto('fecha', query.fecha, { min: 10, max: 10 })
+    .entero('id_tipo_vehiculo', query.id_tipo_vehiculo, { requerido: false, min: 1 })
+    .resultado();
+
+  validarFecha(valores, errores);
+  return { valores, errores };
+}
+
+/** GET /api/estacionamientos/:id/reservas[?fecha=YYYY-MM-DD] */
+export function validarFiltroReservas(query) {
+  const { valores, errores } = campos(query)
+    .texto('fecha', query.fecha, { requerido: false, min: 10, max: 10 })
+    .resultado();
+
+  validarFecha(valores, errores);
+  return { valores, errores };
+}
+
+/** `YYYY-MM-DD` que ademas exista en el calendario (rechaza 2026-02-30). */
+function validarFecha(valores, errores) {
+  if (!valores.fecha) return;
+
+  const fecha = new Date(`${valores.fecha}T00:00:00Z`);
+  const valida =
+    REGEX_FECHA.test(valores.fecha) &&
+    !Number.isNaN(fecha.getTime()) &&
+    fecha.toISOString().startsWith(valores.fecha);
+
+  if (!valida) errores.push({ campo: 'fecha', mensaje: 'debe ser una fecha valida YYYY-MM-DD' });
 }

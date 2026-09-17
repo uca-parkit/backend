@@ -8,14 +8,18 @@ import { validarReserva } from '../validators/reserva.validator.js';
 
 const router = Router();
 
-router.post(
-  '/',
-  authenticate,
-  requireRole(ROLES.CONDUCTOR),
-  validate(validarReserva),
-  reservaController.crear,
-);
+const soloConductor = [authenticate, requireRole(ROLES.CONDUCTOR)];
+const soloPropietario = [authenticate, requireRole(ROLES.PROPIETARIO)];
 
-router.get('/', authenticate, requireRole(ROLES.CONDUCTOR), reservaController.listarMias);
+router.post('/', ...soloConductor, validate(validarReserva), reservaController.crear);
+
+router.get('/', ...soloConductor, reservaController.listarMias);
+
+router.patch('/:id/cancelar', ...soloConductor, reservaController.cancelar);
+
+// El ciclo lo maneja el propietario de la cochera.
+router.patch('/:id/confirmar', ...soloPropietario, reservaController.confirmar);
+router.patch('/:id/ingreso', ...soloPropietario, reservaController.registrarIngreso);
+router.patch('/:id/egreso', ...soloPropietario, reservaController.registrarEgreso);
 
 export default router;

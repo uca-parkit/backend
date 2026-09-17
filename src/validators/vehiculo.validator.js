@@ -5,11 +5,35 @@ export function validarVehiculo(body) {
     .texto('patente', body.patente, { min: 5, max: 12 })
     .entero('id_tipo_vehiculo', body.id_tipo_vehiculo, { min: 1 })
     .texto('marca', body.marca, { requerido: false, max: 60 })
-    .texto('modelo', body.modelo, { requerido: false, max: 60 });
+    .texto('modelo', body.modelo, { requerido: false, max: 60 })
+    .texto('color', body.color, { requerido: false, max: 30 })
+    .booleano('predeterminado', body.predeterminado, { requerido: false });
 
   const resultado = validador.resultado();
 
   // La patente se guarda normalizada para que el UNIQUE sea real.
+  if (resultado.valores.patente) {
+    resultado.valores.patente = resultado.valores.patente.toUpperCase().replace(/\s+/g, '');
+  }
+
+  return resultado;
+}
+
+/**
+ * Update parcial (PATCH): mismas reglas que el alta pero todo opcional. Solo se
+ * validan y devuelven los campos presentes; el resto queda fuera del UPDATE.
+ */
+export function validarCambiosVehiculo(body) {
+  const validador = campos(body)
+    .texto('patente', body.patente, { requerido: false, min: 5, max: 12 })
+    .entero('id_tipo_vehiculo', body.id_tipo_vehiculo, { requerido: false, min: 1 })
+    .texto('marca', body.marca, { requerido: false, max: 60 })
+    .texto('modelo', body.modelo, { requerido: false, max: 60 })
+    .texto('color', body.color, { requerido: false, max: 30 })
+    .booleano('predeterminado', body.predeterminado, { requerido: false });
+
+  const resultado = validador.resultado();
+
   if (resultado.valores.patente) {
     resultado.valores.patente = resultado.valores.patente.toUpperCase().replace(/\s+/g, '');
   }
