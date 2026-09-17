@@ -14,7 +14,6 @@ Stack: **Node.js + Express 5 + PostgreSQL** (SQL crudo con `pg`, sin ORM).
 npm install
 cp .env.example .env        # completar DATABASE_URL y JWT_SECRET
 npm run db:migrate          # crea tablas, constraints y tipos de vehiculo
-npm run db:demo             # opcional: usuarios y estacionamientos de ejemplo
 npm run dev
 ```
 
@@ -28,16 +27,11 @@ La API queda en `http://localhost:3000/api` y `GET /api/health` responde el esta
 | `npm start`               | Servidor en modo produccion                         |
 | `npm run db:migrate`      | Aplica `schema.sql` + `seed.sql` leyendo `.env`     |
 | `npm run db:migrate:prod` | Igual, pero tomando las env vars del entorno        |
-| `npm run db:demo`         | Carga datos de ejemplo (no corre en produccion)     |
 | `npm test`                | Pruebas de la API (ver mas abajo)                   |
 | `npm run test:ci`         | Igual, pero sin leer `.env` (las vars ya estan)     |
 
-`db:migrate` deja los usuarios de prueba del equipo: `conductor@test.com` y
-`propietario@test.com` (password `demo1234`), con los dos perfiles habilitados,
-un estacionamiento y sus cocheras. Son los accesos que ofrece el front.
-
-`db:demo` agrega ademas `propietario@parkit.com` y `conductor@parkit.com` (misma
-password) con dos estacionamientos, 14 cocheras y dos vehiculos.
+`db:migrate` solo crea el esquema y el catalogo de tipos de vehiculo: la base
+queda vacia y los usuarios se dan de alta desde `/registrarse` en el front.
 
 ### Pruebas
 
@@ -105,8 +99,7 @@ src/
 ├── db/
 │   ├── schema.sql          DDL completo (tablas, FKs, UNIQUEs, CHECKs, EXCLUDE)
 │   ├── seed.sql            Catalogo TIPO_VEHICULO (Auto / Moto / Camioneta)
-│   ├── migrate.js          Runner idempotente de schema + seed
-│   └── demo.js             Datos de ejemplo para desarrollo
+│   └── migrate.js          Runner idempotente de schema + seed
 ├── routes/                 Definicion de endpoints y middlewares por ruta
 ├── controllers/            Traducen HTTP <-> servicios (sin logica de negocio)
 ├── services/               Logica de negocio y todo el SQL
